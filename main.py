@@ -1,16 +1,26 @@
 
-import json
+import csv
 import os
 import re
 from datetime import datetime
 
 # ==========================================
-# CONFIGURACIÓN
+# CONFIGURACIÓN DEL SISTEMA
 # ==========================================
 
-ARCHIVO = "expedientes.json"
+ARCHIVO = "expedientes.csv"
 ARCHIVO_CONTADOR = "ultimo_codigo.txt"
 ARCHIVO_TEMPORAL = ARCHIVO + ".tmp"
+
+CAMPOS = [
+    "codigo",
+    "remitente",
+    "asunto",
+    "fecha",
+    "folios",
+    "estado",
+    "fecha_actualizacion"
+]
 
 ESTADOS = [
     "Registrado",
@@ -19,201 +29,119 @@ ESTADOS = [
     "Atendido"
 ]
 
-TIPOS_IDENTIDAD = [
-    "DNI",
-    "Carné de extranjería",
-    "Pasaporte",
-    "Otro"
-]
-
-TIPOS_DOCUMENTO = [
-    "Carta",
-    "Solicitud",
-    "Informe",
-    "Oficio",
-    "Memorando",
-    "Otro"
-]
-
-CAMPOS = [
-    "codigo",
-    "nombre_completo",
-    "tipo_documento_identidad",
-    "numero_documento",
-    "tipo_documento_presentado",
-    "asunto",
-    "fecha_recepcion",
-    "folios",
-    "estado",
-    "fecha_actualizacion"
-]
-
-expedientes = []
+codigos = []
+remitentes = []
+asuntos = []
+fechas = []
+folios = []
+estados = []
+fechas_actualizacion = []
 
 
 # ==========================================
 # 1. VALIDACIONES
 # ==========================================
 
-def validar_nombre(texto):
-    texto = texto.strip()
+def validar_texto(texto, campo):
+    if not texto.strip():
+        return False, f"El campo {campo} es obligatorio."
 
-    if not texto:
-        return False, "El nombre es obligatorio."
+    if not any(caracter.isalpha() for caracter in texto):
+        return False, f"El campo {campo} debe contener letras."
 
-    if not any(c.isalpha() for c in texto):
-        return False, "El nombre debe contener letras."
+    permitidos = ".,'-"
 
     if not all(
-        c.isalpha() or c.isspace() or c in ".'-"
-        for c in texto
+        caracter.isalpha()
+        or caracter.isspace()
+        or caracter in permitidos
+        for caracter in texto
     ):
-        return False, "El nombre contiene caracteres no permitidos."
+        return False, (
+            f"El campo {campo} contiene caracteres no permitidos."
+        )
 
-    return True, ""
-
-
-def validar_asunto(texto):
-    texto = texto.strip()
-
-    if not texto:
-        return False, "El asunto es obligatorio."
-
-    if len(texto) < 3:
-        return False, "El asunto debe tener al menos 3 caracteres."
-
-    if not any(c.isalnum() for c in texto):
-        return False, "El asunto debe contener letras o números."
-
-    return True, ""
+    return True, "Dato válido."
 
 
-def validar_numero_documento(numero, tipo):
-    numero = numero.strip()
-
-    if not numero:
-        return False, "El número de documento es obligatorio."
-
-    if tipo == "DNI":
-        if not re.fullmatch(r"\d{8}", numero):
-            return False, "El DNI debe tener exactamente 8 números."
-    else:
-        if not re.fullmatch(r"[A-Za-z0-9-]{6,15}", numero):
-            return False, (
-                "El número debe tener entre 6 y 15 caracteres "
-                "alfanuméricos."
-            )
-
-    return True, ""
-
-
-def validar_folios(valor):
-    texto = str(valor).strip()
-
-    if not texto.isdigit():
-        return False, "Los folios deben ser números enteros."
-
-    if int(texto) <= 0:
-        return False, "Los folios deben ser mayores que cero."
-
-    return True, ""
-
-
-def validar_fecha(fecha, permitir_futura=False):
+def validar_fecha(fecha):
     try:
-        fecha_objeto = datetime.strptime(
+        fecha_convertida = datetime.strptime(
             fecha, "%Y-%m-%d"
         ).date()
 
-        if fecha_objeto.strftime("%Y-%m-%d") != fecha:
+        # strptime puede aceptar algunas variaciones de formato.
+        if fecha_convertida.strftime("%Y-%m-%d") != fecha:
             return False, "Use el formato AAAA-MM-DD."
 
-        if not permitir_futura and fecha_objeto > datetime.now().date():
+        if fecha_convertida > datetime.now().date():
             return False, "No se permiten fechas futuras."
 
-        return True, ""
+        return True, "Fecha válida."
 
-    except (ValueError, TypeError):
-        return False, "Fecha inválida. Use AAAA-MM-DD."
+    except ValueError:
+        return False, "Fecha inválida. Use el formato AAAA-MM-DD."
 
 
-def solicitar_nombre(mensaje):
+def validar_folios(cantidad):
+    if not cantidad.isdigit():
+        return False, "Los folios deben ser números enteros."
+
+    if int(cantidad) <= 0:
+        return False, "Los folios deben ser mayores que cero."
+
+    return True, "Cantidad válida."
+
+
+def solicitar_texto(mensaje, campo):
     while True:
-        valor = input(mensaje).strip()
-        valido, error = validar_nombre(valor)
+        texto = input(mensaje).strip()
+        valido, respuesta = validar_texto(texto, campo)
 
         if valido:
-            return valor
+            return texto
 
-        print(error)
-
-
-def solicitar_asunto(mensaje="Asunto del expediente: "):
-    while True:
-        valor = input(mensaje).strip()
-        valido, error = validar_asunto(valor)
-
-        if valido:
-            return valor
-
-        print(error)
+        print(respuesta)
 
 
 def solicitar_folios():
     while True:
-        valor = input("Cantidad de folios: ").strip()
-        valido, error = validar_folios(valor)
+        cantidad = input("Cantidad de folios: ").strip()
+        valido, respuesta = validar_folios(cantidad)
 
         if valido:
-            return int(valor)
+            return int(cantidad)
 
-        print(error)
+        print(respuesta)
 
 
 def solicitar_codigo():
     while True:
         numero = input(
-            "Ingresa los 3 números del código (ej. 001): "
+            "Ingresa el código (solo 3 números, ej. 001): "
         ).strip()
 
-        if re.fullmatch(r"\d{3}", numero):
+        if numero.isdigit() and len(numero) == 3:
             return f"EXP-{numero}"
 
-        print("Código inválido. Ingresa exactamente 3 números.")
+        print(
+            "Error: ingresa exactamente 3 números, "
+            "por ejemplo 001."
+        )
 
 
-def seleccionar_opcion(titulo, opciones):
-    print(f"\n{titulo}")
+def listas_sincronizadas():
+    cantidades = {
+        len(codigos),
+        len(remitentes),
+        len(asuntos),
+        len(fechas),
+        len(folios),
+        len(estados),
+        len(fechas_actualizacion)
+    }
 
-    for i, opcion in enumerate(opciones, start=1):
-        print(f"{i}. {opcion}")
-
-    while True:
-        seleccion = input("Selecciona una opción: ").strip()
-
-        if seleccion.isdigit():
-            numero = int(seleccion)
-
-            if 1 <= numero <= len(opciones):
-                return opciones[numero - 1]
-
-        print("Opción inválida.")
-
-
-def solicitar_identidad():
-    tipo = seleccionar_opcion(
-        "Tipo de documento de identidad:",
-        TIPOS_IDENTIDAD
-    )
-
-    while True:
-        numero = input("Número de documento: ").strip()
-        valido, error = validar_numero_documento(numero, tipo)
-
-        if valido:
-            return tipo, numero
-
-        print(error)
+    return len(cantidades) == 1
 
 
 # ==========================================
@@ -223,11 +151,8 @@ def solicitar_identidad():
 def generar_codigo():
     mayor_registrado = 0
 
-    for expediente in expedientes:
-        coincidencia = re.fullmatch(
-            r"EXP-(\d{3})",
-            expediente.get("codigo", "")
-        )
+    for codigo in codigos:
+        coincidencia = re.fullmatch(r"EXP-(\d{3})", codigo)
 
         if coincidencia:
             mayor_registrado = max(
@@ -270,185 +195,203 @@ def generar_codigo():
 
 
 # ==========================================
-# 3. BUSCAR EXPEDIENTES
+# 3. BÚSQUEDA POR CÓDIGO
 # ==========================================
 
 def buscar_por_codigo(codigo):
-    for i, expediente in enumerate(expedientes):
-        if expediente.get("codigo") == codigo:
-            return i
-
-    return None
-
-
-def buscar_por_numero_documento(numero):
-    for i, expediente in enumerate(expedientes):
-        if expediente.get("numero_documento") == numero:
+    for i, valor in enumerate(codigos):
+        if valor == codigo:
             return i
 
     return None
 
 
 # ==========================================
-# 4. CARGAR EXPEDIENTES JSON
+# 4. CARGAR EXPEDIENTES
 # ==========================================
 
 def cargar_expedientes():
-    global expedientes
-
     if not os.path.exists(ARCHIVO):
-        expedientes = []
-        print("No existe un archivo previo. Se creará al guardar.")
+        print("Todavía no existe un archivo de expedientes.")
         return
+
+    # Se cargan primero en listas temporales para evitar
+    # dejar las listas principales parcialmente modificadas.
+    registros = []
+    codigos_vistos = set()
+    rechazados = 0
 
     try:
         with open(
-            ARCHIVO, "r", encoding="utf-8"
+            ARCHIVO,
+            "r",
+            newline="",
+            encoding="utf-8-sig"
         ) as archivo:
-            datos = json.load(archivo)
 
-        if not isinstance(datos, list):
-            print("Error: el JSON debe contener una lista.")
-            return
+            lector = csv.DictReader(archivo)
 
-        registros_validos = []
-        codigos_vistos = set()
-        documentos_vistos = set()
-        rechazados = 0
+            columnas = lector.fieldnames or []
 
-        for dato in datos:
-            if not isinstance(dato, dict):
-                rechazados += 1
-                continue
-
-            try:
-                codigo = str(dato.get("codigo", "")).strip().upper()
-                nombre = str(
-                    dato.get("nombre_completo", "")
-                ).strip()
-
-                tipo_identidad = str(
-                    dato.get("tipo_documento_identidad", "")
-                ).strip()
-
-                numero_documento = str(
-                    dato.get("numero_documento", "")
-                ).strip()
-
-                tipo_presentado = str(
-                    dato.get("tipo_documento_presentado", "")
-                ).strip()
-
-                asunto = str(dato.get("asunto", "")).strip()
-                fecha = str(dato.get("fecha_recepcion", "")).strip()
-
-                estado = str(
-                    dato.get("estado", "Registrado")
-                ).strip()
-
-                fecha_actualizacion = str(
-                    dato.get("fecha_actualizacion", fecha)
-                ).strip()
-
-                valido_nombre, _ = validar_nombre(nombre)
-                valido_asunto, _ = validar_asunto(asunto)
-                valido_fecha, _ = validar_fecha(
-                    fecha, permitir_futura=True
+            if not all(campo in columnas for campo in CAMPOS[:5]):
+                print(
+                    "Error: el CSV no contiene las columnas "
+                    "obligatorias. No se cargaron expedientes."
                 )
-                valido_actualizacion, _ = validar_fecha(
-                    fecha_actualizacion,
-                    permitir_futura=True
-                )
-                valido_documento, _ = validar_numero_documento(
-                    numero_documento, tipo_identidad
-                )
-                valido_folios, _ = validar_folios(
-                    dato.get("folios", 1)
-                )
+                return
 
-                if not re.fullmatch(r"EXP-\d{3}", codigo):
+            for fila in lector:
+                try:
+                    codigo = (fila.get("codigo") or "").strip().upper()
+                    remitente = (fila.get("remitente") or "").strip()
+                    asunto = (fila.get("asunto") or "").strip()
+                    fecha = (fila.get("fecha") or "").strip()
+                    cantidad_texto = (fila.get("folios") or "").strip()
+
+                    estado = (
+                        fila.get("estado") or "Registrado"
+                    ).strip()
+
+                    fecha_actualizacion = (
+                        fila.get("fecha_actualizacion") or fecha
+                    ).strip()
+
+                    if not re.fullmatch(r"EXP-\d{3}", codigo):
+                        rechazados += 1
+                        continue
+
+                    if codigo in codigos_vistos:
+                        rechazados += 1
+                        continue
+
+                    valido_remitente, _ = validar_texto(
+                        remitente, "remitente"
+                    )
+                    valido_asunto, _ = validar_texto(
+                        asunto, "asunto"
+                    )
+
+                    if not valido_remitente or not valido_asunto:
+                        rechazados += 1
+                        continue
+
+                    valido_fecha, _ = validar_fecha(fecha)
+
+                    if not valido_fecha:
+                        rechazados += 1
+                        continue
+
+                    valido_actualizacion, _ = validar_fecha(
+                        fecha_actualizacion
+                    )
+
+                    if not valido_actualizacion:
+                        rechazados += 1
+                        continue
+
+                    valido_folios, _ = validar_folios(
+                        cantidad_texto
+                    )
+
+                    if not valido_folios:
+                        rechazados += 1
+                        continue
+
+                    cantidad = int(cantidad_texto)
+
+                    if estado not in ESTADOS:
+                        estado = "Registrado"
+
+                    registros.append({
+                        "codigo": codigo,
+                        "remitente": remitente,
+                        "asunto": asunto,
+                        "fecha": fecha,
+                        "folios": cantidad,
+                        "estado": estado,
+                        "fecha_actualizacion": fecha_actualizacion
+                    })
+
+                    codigos_vistos.add(codigo)
+
+                except (ValueError, TypeError, KeyError):
                     rechazados += 1
-                    continue
 
-                if (
-                    codigo in codigos_vistos
-                    or numero_documento in documentos_vistos
-                ):
-                    rechazados += 1
-                    continue
+        # Pasar los registros válidos a las listas principales.
+        for registro in registros:
+            codigos.append(registro["codigo"])
+            remitentes.append(registro["remitente"])
+            asuntos.append(registro["asunto"])
+            fechas.append(registro["fecha"])
+            folios.append(registro["folios"])
+            estados.append(registro["estado"])
+            fechas_actualizacion.append(
+                registro["fecha_actualizacion"]
+            )
 
-                if (
-                    not valido_nombre
-                    or not valido_asunto
-                    or not valido_fecha
-                    or not valido_actualizacion
-                    or not valido_documento
-                    or not valido_folios
-                    or tipo_identidad not in TIPOS_IDENTIDAD
-                    or tipo_presentado not in TIPOS_DOCUMENTO
-                ):
-                    rechazados += 1
-                    continue
-
-                if estado not in ESTADOS:
-                    estado = "Registrado"
-
-                registro = {
-                    "codigo": codigo,
-                    "nombre_completo": nombre,
-                    "tipo_documento_identidad": tipo_identidad,
-                    "numero_documento": numero_documento,
-                    "tipo_documento_presentado": tipo_presentado,
-                    "asunto": asunto,
-                    "fecha_recepcion": fecha,
-                    "folios": int(dato.get("folios", 1)),
-                    "estado": estado,
-                    "fecha_actualizacion": fecha_actualizacion
-                }
-
-                registros_validos.append(registro)
-                codigos_vistos.add(codigo)
-                documentos_vistos.add(numero_documento)
-
-            except (ValueError, TypeError, AttributeError):
-                rechazados += 1
-
-        expedientes = registros_validos
-
-        print(f"Expedientes cargados: {len(expedientes)}")
+        print(f"Expedientes cargados: {len(registros)}")
 
         if rechazados:
             print(
-                f"Aviso: se omitieron {rechazados} registros "
-                "con datos inválidos o duplicados."
+                f"Aviso: se omitieron {rechazados} filas "
+                "por contener datos inválidos."
             )
 
-    except (OSError, json.JSONDecodeError, UnicodeError) as error:
-        print(f"Error al leer el archivo JSON: {error}")
-        print("No se sobrescribieron los datos existentes.")
+        if not listas_sincronizadas():
+            print("Error interno: las listas no están sincronizadas.")
+
+    except (OSError, csv.Error, UnicodeError) as error:
+        print(
+            f"Error al leer el archivo. "
+            f"No se guardaron cambios: {error}"
+        )
 
 
 # ==========================================
-# 5. GUARDAR EXPEDIENTES JSON
+# 5. GUARDAR EXPEDIENTES
 # ==========================================
 
 def guardar_expedientes():
-    try:
-        with open(
-            ARCHIVO_TEMPORAL, "w", encoding="utf-8"
-        ) as archivo:
-            json.dump(
-                expedientes,
-                archivo,
-                ensure_ascii=False,
-                indent=4
-            )
-            archivo.write("\n")
+    if not listas_sincronizadas():
+        print(
+            "Error: las listas de datos no están sincronizadas. "
+            "No se guardó el archivo."
+        )
+        return False
 
+    try:
+        # Se escribe primero un archivo temporal para reducir
+        # el riesgo de perder el CSV si ocurre un error.
+        with open(
+            ARCHIVO_TEMPORAL,
+            "w",
+            newline="",
+            encoding="utf-8"
+        ) as archivo:
+
+            escritor = csv.DictWriter(
+                archivo,
+                fieldnames=CAMPOS
+            )
+
+            escritor.writeheader()
+
+            for i in range(len(codigos)):
+                escritor.writerow({
+                    "codigo": codigos[i],
+                    "remitente": remitentes[i],
+                    "asunto": asuntos[i],
+                    "fecha": fechas[i],
+                    "folios": folios[i],
+                    "estado": estados[i],
+                    "fecha_actualizacion": fechas_actualizacion[i]
+                })
+
+        # Sustituye el archivo anterior solo cuando termina la escritura.
         os.replace(ARCHIVO_TEMPORAL, ARCHIVO)
         return True
 
-    except (OSError, TypeError, ValueError) as error:
+    except (OSError, csv.Error, UnicodeError) as error:
         print(f"Error al guardar los expedientes: {error}")
 
         try:
@@ -461,33 +404,19 @@ def guardar_expedientes():
 
 
 # ==========================================
-# 6. MOSTRAR EXPEDIENTE
+# 6. MOSTRAR UN EXPEDIENTE
 # ==========================================
 
 def mostrar_expediente(i):
-    expediente = expedientes[i]
-
-    print("\n" + "=" * 55)
-    print(f"Código                    : {expediente['codigo']}")
-    print(f"Nombre completo           : {expediente['nombre_completo']}")
-    print(
-        "Tipo de identidad        : "
-        f"{expediente['tipo_documento_identidad']}"
-    )
-    print(f"Número de documento       : {expediente['numero_documento']}")
-    print(
-        "Documento presentado     : "
-        f"{expediente['tipo_documento_presentado']}"
-    )
-    print(f"Asunto                    : {expediente['asunto']}")
-    print(f"Fecha de recepción        : {expediente['fecha_recepcion']}")
-    print(f"Folios                    : {expediente['folios']}")
-    print(f"Estado                    : {expediente['estado']}")
-    print(
-        "Última actualización      : "
-        f"{expediente['fecha_actualizacion']}"
-    )
-    print("=" * 55)
+    print("\n" + "=" * 50)
+    print(f"Código                 : {codigos[i]}")
+    print(f"Remitente              : {remitentes[i]}")
+    print(f"Asunto                 : {asuntos[i]}")
+    print(f"Fecha de registro      : {fechas[i]}")
+    print(f"Folios                 : {folios[i]}")
+    print(f"Estado                 : {estados[i]}")
+    print(f"Última actualización   : {fechas_actualizacion[i]}")
+    print("=" * 50)
 
 
 # ==========================================
@@ -495,50 +424,50 @@ def mostrar_expediente(i):
 # ==========================================
 
 def registrar_expediente():
-    print("\n--- REGISTRAR EXPEDIENTE ---")
+    print("\n--- REGISTRO DE EXPEDIENTE ---")
 
-    nombre = solicitar_nombre("Nombre completo del remitente: ")
-    tipo_identidad, numero_documento = solicitar_identidad()
-
-    tipo_presentado = seleccionar_opcion(
-        "Tipo de documento presentado:",
-        TIPOS_DOCUMENTO
+    remitente = solicitar_texto(
+        "Nombre del remitente: ", "remitente"
     )
 
-    asunto = solicitar_asunto()
-    cantidad_folios = solicitar_folios()
+    asunto = solicitar_texto(
+        "Asunto del expediente: ", "asunto"
+    )
 
+    cantidad = solicitar_folios()
     fecha = datetime.now().strftime("%Y-%m-%d")
     codigo = generar_codigo()
 
     if codigo is None:
-        print("No se pudo generar el código.")
+        print("No se pudo generar un código.")
         return
 
-    if buscar_por_numero_documento(numero_documento) is not None:
-        print("Ya existe un expediente con ese número de documento.")
-        return
-
-    nuevo = {
-        "codigo": codigo,
-        "nombre_completo": nombre,
-        "tipo_documento_identidad": tipo_identidad,
-        "numero_documento": numero_documento,
-        "tipo_documento_presentado": tipo_presentado,
-        "asunto": asunto,
-        "fecha_recepcion": fecha,
-        "folios": cantidad_folios,
-        "estado": "Registrado",
-        "fecha_actualizacion": fecha
-    }
-
-    expedientes.append(nuevo)
+    # Guardar el tamaño anterior para poder revertir el registro.
+    codigos.append(codigo)
+    remitentes.append(remitente)
+    asuntos.append(asunto)
+    fechas.append(fecha)
+    folios.append(cantidad)
+    estados.append("Registrado")
+    fechas_actualizacion.append(fecha)
 
     if guardar_expedientes():
-        print("\nExpediente registrado correctamente.")
-        mostrar_expediente(len(expedientes) - 1)
+        print(f"\nCódigo generado: {codigo}")
+        print(f"Fecha de registro: {fecha}")
+        print("Estado inicial: Registrado")
+        print("Expediente registrado correctamente.")
     else:
-        expedientes.pop()
+        for lista in (
+            codigos,
+            remitentes,
+            asuntos,
+            fechas,
+            folios,
+            estados,
+            fechas_actualizacion
+        ):
+            lista.pop()
+
         print("El registro se revirtió porque falló el guardado.")
 
 
@@ -547,43 +476,27 @@ def registrar_expediente():
 # ==========================================
 
 def opcion_buscar_codigo():
-    print("\n--- BUSCAR POR CÓDIGO ---")
+    print("\n--- BUSCAR EXPEDIENTE ---")
 
     codigo = solicitar_codigo()
     indice = buscar_por_codigo(codigo)
 
-    if indice is None:
+    if indice is not None:
+        mostrar_expediente(indice)
+    else:
         print("No se encontró el expediente.")
-        return
-
-    mostrar_expediente(indice)
 
 
 # ==========================================
-# 9. BUSCAR POR NÚMERO DE DOCUMENTO
+# 9. BUSCAR POR REMITENTE
 # ==========================================
 
-def buscar_por_documento():
-    print("\n--- BUSCAR POR NÚMERO DE DOCUMENTO ---")
+def buscar_por_remitente():
+    print("\n--- BUSCAR POR REMITENTE ---")
 
-    numero = input("Número de documento: ").strip()
-    indice = buscar_por_numero_documento(numero)
-
-    if indice is None:
-        print("No se encontró ningún expediente con ese documento.")
-        return
-
-    mostrar_expediente(indice)
-
-
-# ==========================================
-# 10. BUSCAR POR NOMBRE
-# ==========================================
-
-def buscar_por_nombre():
-    print("\n--- BUSCAR POR NOMBRE ---")
-
-    nombre = input("Nombre o parte del nombre: ").strip().casefold()
+    nombre = input(
+        "Nombre o parte del nombre: "
+    ).strip().casefold()
 
     if not nombre:
         print("Debes ingresar un nombre.")
@@ -591,8 +504,8 @@ def buscar_por_nombre():
 
     encontrados = 0
 
-    for i, expediente in enumerate(expedientes):
-        if nombre in expediente["nombre_completo"].casefold():
+    for i, remitente in enumerate(remitentes):
+        if nombre in remitente.casefold():
             mostrar_expediente(i)
             encontrados += 1
 
@@ -600,20 +513,56 @@ def buscar_por_nombre():
 
 
 # ==========================================
-# 11. MOSTRAR TODOS
+# 10. MOSTRAR TODOS
 # ==========================================
 
 def mostrar_todos():
-    print("\n--- TODOS LOS EXPEDIENTES ---")
+    print("\n--- LISTA DE EXPEDIENTES ---")
 
-    if not expedientes:
+    if not codigos:
         print("No hay expedientes registrados.")
         return
 
-    for i in range(len(expedientes)):
+    for i in range(len(codigos)):
         mostrar_expediente(i)
 
-    print(f"Total de expedientes: {len(expedientes)}")
+    print(f"Total de expedientes: {len(codigos)}")
+
+
+# ==========================================
+# 11. ORDENAR EXPEDIENTES
+# ==========================================
+
+def mostrar_ordenados():
+    print("\n--- ORDENAR EXPEDIENTES ---")
+
+    if not codigos:
+        print("No hay expedientes para ordenar.")
+        return
+
+    print("1. Ordenar por código")
+    print("2. Ordenar por fecha")
+
+    opcion = input("Seleccione el criterio: ").strip()
+
+    if opcion == "1":
+        indices = sorted(
+            range(len(codigos)),
+            key=lambda i: codigos[i]
+        )
+
+    elif opcion == "2":
+        indices = sorted(
+            range(len(fechas)),
+            key=lambda i: (fechas[i], codigos[i])
+        )
+
+    else:
+        print("Opción no válida.")
+        return
+
+    for i in indices:
+        mostrar_expediente(i)
 
 
 # ==========================================
@@ -630,87 +579,87 @@ def actualizar_expediente():
         print("No se encontró el expediente.")
         return
 
-    original = expedientes[i]
     mostrar_expediente(i)
 
-    print("\nDeja vacío un campo para conservar el valor actual.")
+    print("\nDeja vacío un campo para conservar su valor.")
+    print("La fecha original de registro no se puede modificar.")
 
-    nuevo = original.copy()
+    nuevo_remitente = input("Nuevo remitente: ").strip()
+    nuevo_asunto = input("Nuevo asunto: ").strip()
+    nuevos_folios = input("Nueva cantidad de folios: ").strip()
 
-    nombre = input("Nuevo nombre completo: ").strip()
+    remitente_final = remitentes[i]
+    asunto_final = asuntos[i]
+    folios_final = folios[i]
 
-    if nombre:
-        valido, error = validar_nombre(nombre)
-
-        if not valido:
-            print(error)
-            return
-
-        nuevo["nombre_completo"] = nombre
-
-    cambiar_identidad = input(
-        "¿Cambiar tipo o número de identidad? (S/N): "
-    ).strip().upper()
-
-    if cambiar_identidad == "S":
-        tipo, numero = solicitar_identidad()
-
-        for j, otro in enumerate(expedientes):
-            if (
-                j != i
-                and otro["numero_documento"] == numero
-            ):
-                print("Ese número de documento ya está registrado.")
-                return
-
-        nuevo["tipo_documento_identidad"] = tipo
-        nuevo["numero_documento"] = numero
-
-    cambiar_tipo = input(
-        "¿Cambiar tipo de documento presentado? (S/N): "
-    ).strip().upper()
-
-    if cambiar_tipo == "S":
-        nuevo["tipo_documento_presentado"] = seleccionar_opcion(
-            "Tipo de documento presentado:",
-            TIPOS_DOCUMENTO
+    # Validar el remitente si se escribió un nuevo valor.
+    if nuevo_remitente:
+        valido, mensaje = validar_texto(
+            nuevo_remitente, "remitente"
         )
 
-    asunto = input("Nuevo asunto: ").strip()
-
-    if asunto:
-        valido, error = validar_asunto(asunto)
-
         if not valido:
-            print(error)
+            print(mensaje)
             return
 
-        nuevo["asunto"] = asunto
+        remitente_final = nuevo_remitente
 
-    cantidad = input("Nueva cantidad de folios: ").strip()
-
-    if cantidad:
-        valido, error = validar_folios(cantidad)
+    # Validar el asunto si se escribió un nuevo valor.
+    if nuevo_asunto:
+        valido, mensaje = validar_texto(
+            nuevo_asunto, "asunto"
+        )
 
         if not valido:
-            print(error)
+            print(mensaje)
             return
 
-        nuevo["folios"] = int(cantidad)
+        asunto_final = nuevo_asunto
 
-    if nuevo == original:
+    # Validar la cantidad de folios si se escribió un nuevo valor.
+    if nuevos_folios:
+        valido, mensaje = validar_folios(nuevos_folios)
+
+        if not valido:
+            print(mensaje)
+            return
+
+        folios_final = int(nuevos_folios)
+
+    hubo_cambios = (
+        remitente_final != remitentes[i]
+        or asunto_final != asuntos[i]
+        or folios_final != folios[i]
+    )
+
+    if not hubo_cambios:
         print("No se realizaron cambios.")
         return
 
-    nuevo["fecha_actualizacion"] = datetime.now().strftime("%Y-%m-%d")
-    expedientes[i] = nuevo
+    valores_anteriores = (
+        remitentes[i],
+        asuntos[i],
+        folios[i],
+        fechas_actualizacion[i]
+    )
 
-    # La fecha de recepción original se conserva.
+    remitentes[i] = remitente_final
+    asuntos[i] = asunto_final
+    folios[i] = folios_final
+    fechas_actualizacion[i] = datetime.now().strftime("%Y-%m-%d")
+
+    # La fecha de registro se conserva sin modificaciones.
     if guardar_expedientes():
-        print("Expediente actualizado correctamente.")
+        print("\nExpediente actualizado correctamente.")
         mostrar_expediente(i)
     else:
-        expedientes[i] = original
+        (
+            remitentes[i],
+            asuntos[i],
+            folios[i],
+            fechas_actualizacion[i]
+        ) = valores_anteriores
+
         print("Los cambios se revirtieron porque falló el guardado.")
 
 
@@ -738,12 +687,27 @@ def eliminar_expediente():
         print("Eliminación cancelada.")
         return
 
-    eliminado = expedientes.pop(i)
+    listas = (
+        codigos,
+        remitentes,
+        asuntos,
+        fechas,
+        folios,
+        estados,
+        fechas_actualizacion
+    )
+
+    datos = tuple(lista[i] for lista in listas)
+
+    for lista in listas:
+        lista.pop(i)
 
     if guardar_expedientes():
         print("Expediente eliminado correctamente.")
     else:
-        expedientes.insert(i, eliminado)
+        for lista, valor in zip(listas, datos):
+            lista.insert(i, valor)
+
         print("La eliminación se revirtió porque falló el guardado.")
 
 
@@ -752,7 +716,7 @@ def eliminar_expediente():
 # ==========================================
 
 def cambiar_estado():
-    print("\n--- CAMBIAR ESTADO ---")
+    print("\n--- CAMBIAR ESTADO DEL EXPEDIENTE ---")
 
     codigo = solicitar_codigo()
     i = buscar_por_codigo(codigo)
@@ -763,30 +727,44 @@ def cambiar_estado():
 
     mostrar_expediente(i)
 
-    nuevo_estado = seleccionar_opcion(
-        "Estados disponibles:",
-        ESTADOS
-    )
+    print("\nEstados disponibles:")
 
-    if nuevo_estado == expedientes[i]["estado"]:
+    for numero, estado in enumerate(ESTADOS, start=1):
+        print(f"{numero}. {estado}")
+
+    opcion = input("Seleccione el nuevo estado: ").strip()
+
+    if (
+        not opcion.isdigit()
+        or not 1 <= int(opcion) <= len(ESTADOS)
+    ):
+        print("Opción de estado no válida.")
+        return
+
+    nuevo_estado = ESTADOS[int(opcion) - 1]
+
+    if nuevo_estado == estados[i]:
         print("El expediente ya tiene ese estado.")
         return
 
-    estado_anterior = expedientes[i]["estado"]
-    fecha_anterior = expedientes[i]["fecha_actualizacion"]
+    estado_anterior = estados[i]
+    fecha_anterior = fechas_actualizacion[i]
 
-    expedientes[i]["estado"] = nuevo_estado
-    expedientes[i]["fecha_actualizacion"] = (
-        datetime.now().strftime("%Y-%m-%d")
-    )
+    estados[i] = nuevo_estado
+    fechas_actualizacion[i] = datetime.now().strftime("%Y-%m-%d")
 
     if guardar_expedientes():
-        print("Estado actualizado correctamente.")
-        mostrar_expediente(i)
+        print(f"Estado actualizado: {estados[i]}")
+        print(f"Fecha de registro: {fechas[i]}")
+        print(
+            "Última actualización: "
+            f"{fechas_actualizacion[i]}"
+        )
     else:
-        expedientes[i]["estado"] = estado_anterior
-        expedientes[i]["fecha_actualizacion"] = fecha_anterior
-        print("El cambio se revirtió porque falló el guardado.")
+        estados[i] = estado_anterior
+        fechas_actualizacion[i] = fecha_anterior
+
+        print("El cambio de estado se revirtió porque falló el guardado.")
 
 
 # ==========================================
@@ -794,66 +772,64 @@ def cambiar_estado():
 # ==========================================
 
 def consultar_por_estado():
-    print("\n--- CONSULTAR POR ESTADO ---")
+    print("\n--- CONSULTAR EXPEDIENTES POR ESTADO ---")
 
-    estado_buscado = seleccionar_opcion(
-        "Selecciona el estado:",
-        ESTADOS
-    )
+    for numero, estado in enumerate(ESTADOS, start=1):
+        print(f"{numero}. {estado}")
 
+    opcion = input("Seleccione el estado: ").strip()
+
+    if (
+        not opcion.isdigit()
+        or not 1 <= int(opcion) <= len(ESTADOS)
+    ):
+        print("Opción no válida.")
+        return
+
+    estado_buscado = ESTADOS[int(opcion) - 1]
     encontrados = 0
 
-    for i, expediente in enumerate(expedientes):
-        if expediente["estado"] == estado_buscado:
+    for i, estado in enumerate(estados):
+        if estado == estado_buscado:
             mostrar_expediente(i)
             encontrados += 1
 
-    print(f"Total encontrados: {encontrados}")
+    print(f"Expedientes encontrados: {encontrados}")
 
 
 # ==========================================
-# 16. ESTADÍSTICAS
+# 16. ESTADÍSTICAS Y REPORTE
 # ==========================================
 
 def mostrar_estadisticas():
-    print("\n--- REPORTE Y ESTADÍSTICAS ---")
+    print("\n--- REPORTE DEL SISTEMA ---")
 
-    total = len(expedientes)
+    total = len(codigos)
 
     if total == 0:
         print("No hay expedientes registrados.")
         return
 
-    total_folios = sum(
-        expediente["folios"] for expediente in expedientes
-    )
+    total_folios = sum(folios)
 
     print(f"Total de expedientes: {total}")
     print(f"Total de folios: {total_folios}")
     print(f"Promedio de folios: {total_folios / total:.2f}")
 
-    print("\nExpedientes por estado:")
+    print("\nCantidad por estado:")
 
     for estado in ESTADOS:
-        cantidad = sum(
-            1 for expediente in expedientes
-            if expediente["estado"] == estado
-        )
-        print(f"- {estado}: {cantidad}")
+        print(f"- {estado}: {estados.count(estado)}")
 
     pendientes = sum(
-        1 for expediente in expedientes
-        if expediente["estado"] != "Atendido"
+        1 for estado in estados
+        if estado != "Atendido"
     )
 
-    print(f"\nPendientes de atención: {pendientes}")
+    print(f"\nExpedientes pendientes de atención: {pendientes}")
 
-    fechas_validas = [
-        expediente["fecha_recepcion"]
-        for expediente in expedientes
-    ]
-
-    print(f"Fecha de recepción más antigua: {min(fechas_validas)}")
+    if fechas:
+        print(f"Fecha del expediente más antiguo: {min(fechas)}")
 
 
 # ==========================================
@@ -862,65 +838,68 @@ def mostrar_estadisticas():
 
 def mostrar_menu():
     print("""
-=======================================================
-                MESA DE PARTES DIGITAL
-=======================================================
+==================================================
+             MESA DE PARTES DIGITAL
+==================================================
  1. Registrar expediente
- 2. Buscar por código
- 3. Buscar por número de documento
- 4. Buscar por nombre
- 5. Mostrar todos los expedientes
+ 2. Buscar expediente por código
+ 3. Buscar por remitente
+ 4. Mostrar todos los expedientes
+ 5. Ordenar expedientes
  6. Actualizar expediente
  7. Eliminar expediente
- 8. Cambiar estado
- 9. Consultar por estado
-10. Reporte y estadísticas
+ 8. Reporte y estadísticas
+ 9. Cambiar estado del expediente
+10. Consultar expedientes por estado
 11. Salir
-=======================================================
+==================================================
 """)
 
 
 # ==========================================
-# 18. PROGRAMA PRINCIPAL
+# 18. EJECUCIÓN DEL SISTEMA
 # ==========================================
 
 def main():
-    print("=" * 55)
-    print("             MESA DE PARTES DIGITAL")
-    print("=" * 55)
+    print("=" * 50)
+    print("       SISTEMA DE MESA DE PARTES DIGITAL")
+    print("=" * 50)
 
     cargar_expedientes()
 
     opciones = {
         "1": registrar_expediente,
         "2": opcion_buscar_codigo,
-        "3": buscar_por_documento,
-        "4": buscar_por_nombre,
-        "5": mostrar_todos,
+        "3": buscar_por_remitente,
+        "4": mostrar_todos,
+        "5": mostrar_ordenados,
         "6": actualizar_expediente,
         "7": eliminar_expediente,
-        "8": cambiar_estado,
-        "9": consultar_por_estado,
-        "10": mostrar_estadisticas
+        "8": mostrar_estadisticas,
+        "9": cambiar_estado,
+        "10": consultar_por_estado
     }
 
     while True:
         mostrar_menu()
-        opcion = input("Selecciona una opción: ").strip()
+        opcion = input("Seleccione una opción: ").strip()
 
         if opcion == "11":
             if guardar_expedientes():
                 print("Datos guardados correctamente.")
-                print("Sistema cerrado.")
+                print("Sistema cerrado correctamente.")
                 break
 
-            print("No se pudo guardar. El sistema permanecerá abierto.")
+            print(
+                "No se pudo confirmar el guardado. "
+                "El sistema permanecerá abierto."
+            )
 
         elif opcion in opciones:
             opciones[opcion]()
 
         else:
-            print("Opción inválida. Selecciona del 1 al 11.")
+            print("Opción no válida. Seleccione del 1 al 11.")
 
 
 if __name__ == "__main__":
