@@ -281,12 +281,16 @@ def buscar_por_codigo(codigo):
     return None
 
 
+
 def buscar_por_numero_documento(numero):
+    encontrados = []
+
     for i, expediente in enumerate(expedientes):
         if expediente.get("numero_documento") == numero:
-            return i
+            encontrados.append(i)
 
-    return None
+    return encontrados
+
 
 
 # ==========================================
@@ -370,9 +374,9 @@ def cargar_expedientes():
                 ):
                     rechazados += 1
                     continue
-
                 if estado not in ESTADOS:
-                    estado = "Registrado"
+                    rechazados += 1
+                    continue
 
                 registro = {
                     "codigo": codigo,
@@ -542,17 +546,21 @@ def opcion_buscar_codigo():
 # 9. BUSCAR POR NÚMERO DE DOCUMENTO
 # ==========================================
 
+
 def buscar_por_documento():
     print("\n--- BUSCAR POR NÚMERO DE DOCUMENTO ---")
 
     numero = input("Número de documento: ").strip()
-    indice = buscar_por_numero_documento(numero)
+    indices = buscar_por_numero_documento(numero)
 
-    if indice is None:
+    if not indices:
         print("No se encontró ningún expediente con ese documento.")
         return
 
-    mostrar_expediente(indice)
+    for indice in indices:
+        mostrar_expediente(indice)
+
+    print(f"Total de expedientes encontrados: {len(indices)}")
 
 
 # ==========================================
@@ -633,14 +641,6 @@ def actualizar_expediente():
 
     if cambiar_identidad == "S":
         tipo, numero = solicitar_identidad()
-
-        for j, otro in enumerate(expedientes):
-            if (
-                j != i
-                and otro["numero_documento"] == numero
-            ):
-                print("Ese número de documento ya está registrado.")
-                return
 
         nuevo["tipo_documento_identidad"] = tipo
         nuevo["numero_documento"] = numero
