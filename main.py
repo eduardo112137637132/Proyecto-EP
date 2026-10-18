@@ -292,28 +292,25 @@ def buscar_por_numero_documento(numero):
 # ==========================================
 # 4. CARGAR EXPEDIENTES JSON
 # ==========================================
-
 def cargar_expedientes():
     global expedientes
 
     if not os.path.exists(ARCHIVO):
         expedientes = []
         print("No existe un archivo previo. Se creará al guardar.")
-        return
+        return True
 
     try:
-        with open(
-            ARCHIVO, "r", encoding="utf-8"
-        ) as archivo:
+        with open(ARCHIVO, "r", encoding="utf-8") as archivo:
             datos = json.load(archivo)
 
         if not isinstance(datos, list):
             print("Error: el JSON debe contener una lista.")
-            return
+            print("No se iniciará el sistema para proteger los datos.")
+            return False
 
         registros_validos = []
         codigos_vistos = set()
-        documentos_vistos = set()
         rechazados = 0
 
         for dato in datos:
@@ -323,29 +320,19 @@ def cargar_expedientes():
 
             try:
                 codigo = str(dato.get("codigo", "")).strip().upper()
-                nombre = str(
-                    dato.get("nombre_completo", "")
-                ).strip()
-
+                nombre = str(dato.get("nombre_completo", "")).strip()
                 tipo_identidad = str(
                     dato.get("tipo_documento_identidad", "")
                 ).strip()
-
                 numero_documento = str(
                     dato.get("numero_documento", "")
                 ).strip()
-
                 tipo_presentado = str(
                     dato.get("tipo_documento_presentado", "")
                 ).strip()
-
                 asunto = str(dato.get("asunto", "")).strip()
                 fecha = str(dato.get("fecha_recepcion", "")).strip()
-
-                estado = str(
-                    dato.get("estado", "Registrado")
-                ).strip()
-
+                estado = str(dato.get("estado", "Registrado")).strip()
                 fecha_actualizacion = str(
                     dato.get("fecha_actualizacion", fecha)
                 ).strip()
@@ -356,24 +343,18 @@ def cargar_expedientes():
                     fecha, permitir_futura=True
                 )
                 valido_actualizacion, _ = validar_fecha(
-                    fecha_actualizacion,
-                    permitir_futura=True
+                    fecha_actualizacion, permitir_futura=True
                 )
                 valido_documento, _ = validar_numero_documento(
                     numero_documento, tipo_identidad
                 )
-                valido_folios, _ = validar_folios(
-                    dato.get("folios", 1)
-                )
+                valido_folios, _ = validar_folios(dato.get("folios", 1))
 
                 if not re.fullmatch(r"EXP-\d{3}", codigo):
                     rechazados += 1
                     continue
-
-                if (
-                    codigo in codigos_vistos
-                    or numero_documento in documentos_vistos
-                ):
+                
+                if codigo in codigos_vistos:
                     rechazados += 1
                     continue
 
@@ -408,25 +389,27 @@ def cargar_expedientes():
 
                 registros_validos.append(registro)
                 codigos_vistos.add(codigo)
-                documentos_vistos.add(numero_documento)
 
             except (ValueError, TypeError, AttributeError):
                 rechazados += 1
 
-        expedientes = registros_validos
-
-        print(f"Expedientes cargados: {len(expedientes)}")
-
         if rechazados:
             print(
-                f"Aviso: se omitieron {rechazados} registros "
-                "con datos inválidos o duplicados."
+                f"Error: se encontraron {rechazados} registros "
+                "inválidos o duplicados."
             )
+            print("No se iniciará el sistema para proteger el archivo.")
+            print("Revisa expedientes.json antes de continuar.")
+            return False
+
+        expedientes = registros_validos
+        print(f"Expedientes cargados: {len(expedientes)}")
+        return True
 
     except (OSError, json.JSONDecodeError, UnicodeError) as error:
         print(f"Error al leer el archivo JSON: {error}")
-        print("No se sobrescribieron los datos existentes.")
-
+        print("No se iniciará el sistema para proteger los datos.")
+        return False
 
 # ==========================================
 # 5. GUARDAR EXPEDIENTES JSON
@@ -513,10 +496,6 @@ def registrar_expediente():
 
     if codigo is None:
         print("No se pudo generar el código.")
-        return
-
-    if buscar_por_numero_documento(numero_documento) is not None:
-        print("Ya existe un expediente con ese número de documento.")
         return
 
     nuevo = {
@@ -888,8 +867,9 @@ def main():
     print("=" * 55)
     print("             MESA DE PARTES DIGITAL")
     print("=" * 55)
-
-    cargar_expedientes()
+    if not cargar_expedientes():
+        print("Sistema cerrado para proteger los datos existentes.")
+        return
 
     opciones = {
         "1": registrar_expediente,
