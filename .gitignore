@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+expedientes.json
+expedientes.csv
+expedientes.csv.tmp
+ultimo_codigo.txt
+main_csv_respaldo.py
+main_json_recuperado.py
