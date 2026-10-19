@@ -601,6 +601,49 @@ def mostrar_todos():
         mostrar_expediente(i)
 
     print(f"Total de expedientes: {len(expedientes)}")
+    
+
+# ==========================================
+# ORDENAR EXPEDIENTES
+# ==========================================
+
+def mostrar_ordenados():
+    print("\n--- ORDENAR EXPEDIENTES ---")
+
+    if not expedientes:
+        print("No hay expedientes registrados.")
+        return
+
+    print("1. Ordenar por código")
+    print("2. Ordenar por fecha de recepción")
+
+    opcion = input("Selecciona una opción: ").strip()
+
+    if opcion == "1":
+        ordenados = sorted(
+            expedientes,
+            key=lambda e: e["codigo"]
+        )
+    elif opcion == "2":
+        ordenados = sorted(
+            expedientes,
+            key=lambda e: e["fecha_recepcion"]
+        )
+    else:
+        print("Opción inválida.")
+        return
+
+    for expediente in ordenados:
+        print("-" * 55)
+        print(f"Código: {expediente['codigo']}")
+        print(f"Nombre: {expediente['nombre_completo']}")
+        print(f"Asunto: {expediente['asunto']}")
+        print(f"Fecha de recepción: {expediente['fecha_recepcion']}")
+        print(f"Estado: {expediente['estado']}")
+
+    print("-" * 55)
+    print(f"Total de expedientes: {len(ordenados)}")
+
 
 
 # ==========================================
@@ -854,7 +897,8 @@ def mostrar_menu():
  8. Cambiar estado
  9. Consultar por estado
 10. Reporte y estadísticas
-11. Salir
+11. Ordenar expedientes
+12. Salir
 =======================================================
 """)
 
@@ -881,14 +925,15 @@ def main():
         "7": eliminar_expediente,
         "8": cambiar_estado,
         "9": consultar_por_estado,
-        "10": mostrar_estadisticas
+        "10": mostrar_estadisticas,
+        "11": mostrar_ordenados
     }
 
     while True:
         mostrar_menu()
         opcion = input("Selecciona una opción: ").strip()
 
-        if opcion == "11":
+        if opcion == "12":
             if guardar_expedientes():
                 print("Datos guardados correctamente.")
                 print("Sistema cerrado.")
@@ -900,7 +945,7 @@ def main():
             opciones[opcion]()
 
         else:
-            print("Opción inválida. Selecciona del 1 al 11.")
+            print("Opción inválida. Selecciona del 1 al 12.")
 
 
 if __name__ == "__main__":
